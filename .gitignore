@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+data/
+dist/
+build/
+coverage/
+.DS_Store
+*.log
+npm-debug.log*
+.vscode/
+.idea/

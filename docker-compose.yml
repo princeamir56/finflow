@@ -1,0 +1,123 @@
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: finflow-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks: [finflow]
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: finflow-kafka
+    depends_on: [zookeeper]
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    networks: [finflow]
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: finflow-kafka-ui
+    depends_on: [kafka]
+    ports:
+      - "8080:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: finflow
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:29092
+    networks: [finflow]
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: services/auth-service/Dockerfile
+    container_name: finflow-auth
+    depends_on: [kafka]
+    environment:
+      AUTH_GRPC_PORT: 50051
+      AUTH_DB_PATH: /app/services/auth-service/data/auth.db
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: finflow-auth
+      LOG_LEVEL: info
+    volumes:
+      - auth_data:/app/services/auth-service/data
+    ports:
+      - "50051:50051"
+    networks: [finflow]
+
+  transaction-service:
+    build:
+      context: .
+      dockerfile: services/transaction-service/Dockerfile
+    container_name: finflow-transaction
+    depends_on: [kafka]
+    environment:
+      TRANSACTION_GRPC_PORT: 50052
+      TRANSACTION_DB_PATH: /app/services/transaction-service/data/transaction.db
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: finflow-transaction
+      LOG_LEVEL: info
+    volumes:
+      - transaction_data:/app/services/transaction-service/data
+    ports:
+      - "50052:50052"
+    networks: [finflow]
+
+  notification-service:
+    build:
+      context: .
+      dockerfile: services/notification-service/Dockerfile
+    container_name: finflow-notification
+    depends_on: [kafka]
+    environment:
+      NOTIFICATION_GRPC_PORT: 50053
+      NOTIFICATION_DB_NAME: finflow_notifications
+      KAFKA_BROKERS: kafka:29092
+      KAFKA_CLIENT_ID: finflow-notification
+      LOG_LEVEL: info
+    ports:
+      - "50053:50053"
+    networks: [finflow]
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: finflow-gateway
+    depends_on:
+      - auth-service
+      - transaction-service
+      - notification-service
+    environment:
+      GATEWAY_PORT: 3000
+      NODE_ENV: production
+      LOG_LEVEL: info
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-please}
+      AUTH_GRPC_HOST: auth-service
+      AUTH_GRPC_PORT: 50051
+      TRANSACTION_GRPC_HOST: transaction-service
+      TRANSACTION_GRPC_PORT: 50052
+      NOTIFICATION_GRPC_HOST: notification-service
+      NOTIFICATION_GRPC_PORT: 50053
+    ports:
+      - "3000:3000"
+    networks: [finflow]
+
+volumes:
+  auth_data:
+  transaction_data:
+
+networks:
+  finflow:
+    driver: bridge

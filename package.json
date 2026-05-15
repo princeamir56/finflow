@@ -1,0 +1,28 @@
+{
+  "name": "finflow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "FinFlow — digital banking microservices platform (Express + GraphQL + gRPC + Kafka)",
+  "workspaces": [
+    "gateway",
+    "services/*",
+    "shared"
+  ],
+  "scripts": {
+    "dev:gateway": "npm --workspace gateway run dev",
+    "dev:auth": "npm --workspace services/auth-service run dev",
+    "dev:tx": "npm --workspace services/transaction-service run dev",
+    "dev:notif": "npm --workspace services/notification-service run dev",
+    "dev": "concurrently -n gw,auth,tx,notif -c blue,green,yellow,magenta \"npm run dev:gateway\" \"npm run dev:auth\" \"npm run dev:tx\" \"npm run dev:notif\"",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

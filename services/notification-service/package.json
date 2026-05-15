@@ -1,0 +1,21 @@
+{
+  "name": "@finflow/notification-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.11.1",
+    "@grpc/proto-loader": "^0.7.13",
+    "@finflow/shared": "*",
+    "dotenv": "^16.4.5",
+    "kafkajs": "^2.2.4",
+    "rxdb": "^15.24.0",
+    "rxjs": "^7.8.1",
+    "uuid": "^10.0.0"
+  }
+}
