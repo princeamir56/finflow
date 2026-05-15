@@ -10,7 +10,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import swaggerUi from 'swagger-ui-express';
 import { ApolloServer } from '@apollo/server';
-import { expressMiddleware } from '@as-integrations/express5';
+import { expressMiddleware } from '@as-integrations/express4';
 
 import { createLogger } from '@finflow/shared/logger';
 import { typeDefs } from './graphql/schema.js';
