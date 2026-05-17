@@ -7,7 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROTO_DIR = path.resolve(__dirname, '../../../shared/proto');
 
 const loaderOptions = {
-  keepCase: false,
+  keepCase: true,
   longs: String,
   enums: String,
   defaults: true,
