@@ -1,6 +1,6 @@
 # FinFlow
 
-> A microservices-based digital banking platform — university SOA project.
+> A microservices-based digital banking platform  university SOA project.
 
 FinFlow demonstrates a polyglot-protocol, event-driven banking backend: REST + GraphQL at the edge, gRPC between services, and Kafka for async events.
 
@@ -119,4 +119,4 @@ npm run dev
 
 ## License
 
-Academic project — not licensed for production use.
+Kerkeni Amir | Migaou Souleima Mahbouba | Maatoug Hiba
