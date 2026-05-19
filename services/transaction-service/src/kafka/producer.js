@@ -1,6 +1,7 @@
 import { Kafka } from 'kafkajs';
 import { v4 as uuidv4 } from 'uuid';
 import { createLogger } from '@finflow/shared/logger';
+import { accountsRepository } from '../db/accounts.repository.js';
 
 const logger = createLogger('transaction-service:kafka');
 
@@ -65,10 +66,17 @@ export async function publishAccountCreated(account) {
 }
 
 export async function publishTransactionCreated(tx) {
+  const fromAcc = tx.from_account_id ? accountsRepository.findById(tx.from_account_id) : null;
+  const toAcc = tx.to_account_id ? accountsRepository.findById(tx.to_account_id) : null;
   await publish('transaction.created', tx.id, 'transaction.created', {
     transactionId: tx.id,
     fromAccountId: tx.from_account_id,
     toAccountId: tx.to_account_id,
+    fromUserId: fromAcc ? fromAcc.user_id : null,
+    toUserId: toAcc ? toAcc.user_id : null,
+    fromIban: fromAcc ? fromAcc.iban : null,
+    toIban: toAcc ? toAcc.iban : null,
+    currency: (fromAcc || toAcc) ? (fromAcc?.currency || toAcc?.currency) : null,
     amount: tx.amount,
     type: tx.type,
     status: tx.status,
