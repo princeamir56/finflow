@@ -81,8 +81,7 @@ finflow/
 │   ├── proto/                auth.proto, transaction.proto, notification.proto
 │   └── src/                  logger.js
 ├── client/                   Minimal HTML+JS test client
-├── docs/                     POSTMAN_COLLECTION.json
-└── scripts/                  demo.sh
+└── docs/                     POSTMAN_COLLECTION.json
 ```
 
 ---
