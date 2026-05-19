@@ -1,0 +1,175 @@
+{
+  "info": {
+    "name": "FinFlow",
+    "_postman_id": "finflow-collection-001",
+    "description": "FinFlow microservices — REST + GraphQL. Set the `baseUrl` (default http://localhost:3000) and `token` collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "token", "value": "" },
+    { "key": "accountId", "value": "" },
+    { "key": "toAccountId", "value": "" },
+    { "key": "notificationId", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/register", "host": ["{{baseUrl}}"], "path": ["api","auth","register"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\",\n  \"full_name\": \"Alice\"\n}" }
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "const r = pm.response.json();",
+              "if (r.token) pm.collectionVariables.set('token', r.token);"
+            ]}
+          }]
+        },
+        {
+          "name": "Login",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/auth/login", "host": ["{{baseUrl}}"], "path": ["api","auth","login"] },
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"alice@example.com\",\n  \"password\": \"secret123\"\n}" }
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "const r = pm.response.json();",
+              "if (r.token) pm.collectionVariables.set('token', r.token);"
+            ]}
+          }]
+        },
+        {
+          "name": "Me",
+          "request": {
+            "method": "GET",
+            "url": { "raw": "{{baseUrl}}/api/auth/me", "host": ["{{baseUrl}}"], "path": ["api","auth","me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "item": [
+        {
+          "name": "Create account",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/accounts", "host": ["{{baseUrl}}"], "path": ["api","accounts"] },
+            "body": { "mode": "raw", "raw": "{ \"currency\": \"EUR\" }" }
+          },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "const r = pm.response.json();",
+              "if (r.id) pm.collectionVariables.set('accountId', r.id);"
+            ]}
+          }]
+        },
+        {
+          "name": "My accounts",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/accounts", "host": ["{{baseUrl}}"], "path": ["api","accounts"] } }
+        },
+        {
+          "name": "Get account",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/accounts/{{accountId}}", "host": ["{{baseUrl}}"], "path": ["api","accounts","{{accountId}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Deposit",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/transactions/deposit", "host": ["{{baseUrl}}"], "path": ["api","transactions","deposit"] },
+            "body": { "mode": "raw", "raw": "{ \"account_id\": \"{{accountId}}\", \"amount\": 100, \"description\": \"seed\" }" }
+          }
+        },
+        {
+          "name": "Withdraw",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/transactions/withdraw", "host": ["{{baseUrl}}"], "path": ["api","transactions","withdraw"] },
+            "body": { "mode": "raw", "raw": "{ \"account_id\": \"{{accountId}}\", \"amount\": 20 }" }
+          }
+        },
+        {
+          "name": "Transfer",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/api/transactions/transfer", "host": ["{{baseUrl}}"], "path": ["api","transactions","transfer"] },
+            "body": { "mode": "raw", "raw": "{ \"from_account_id\": \"{{accountId}}\", \"to_account_id\": \"{{toAccountId}}\", \"amount\": 30 }" }
+          }
+        },
+        {
+          "name": "History",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/transactions/account/{{accountId}}", "host": ["{{baseUrl}}"], "path": ["api","transactions","account","{{accountId}}"] } }
+        }
+      ]
+    },
+    {
+      "name": "Notifications",
+      "item": [
+        {
+          "name": "List",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/api/notifications", "host": ["{{baseUrl}}"], "path": ["api","notifications"] } },
+          "event": [{
+            "listen": "test",
+            "script": { "type": "text/javascript", "exec": [
+              "const r = pm.response.json();",
+              "if (Array.isArray(r) && r[0]) pm.collectionVariables.set('notificationId', r[0].id);"
+            ]}
+          }]
+        },
+        {
+          "name": "Mark as read",
+          "request": { "method": "PATCH", "url": { "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/read", "host": ["{{baseUrl}}"], "path": ["api","notifications","{{notificationId}}","read"] } }
+        }
+      ]
+    },
+    {
+      "name": "GraphQL",
+      "item": [
+        {
+          "name": "myNotifications + unreadCount",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql", "host": ["{{baseUrl}}"], "path": ["graphql"] },
+            "body": { "mode": "raw", "raw": "{ \"query\": \"{ myNotifications { id type title message read createdAt } unreadNotificationCount }\" }" }
+          }
+        },
+        {
+          "name": "markNotificationAsRead",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/graphql", "host": ["{{baseUrl}}"], "path": ["graphql"] },
+            "body": { "mode": "raw", "raw": "{ \"query\": \"mutation($id: ID!){ markNotificationAsRead(id:$id){ id read } }\", \"variables\": { \"id\": \"{{notificationId}}\" } }" }
+          }
+        }
+      ]
+    }
+  ]
+}

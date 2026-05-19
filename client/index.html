@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FinFlow — Test Client</title>
+  <style>
+    :root { --bg:#0f172a; --panel:#1e293b; --accent:#38bdf8; --text:#e2e8f0; --muted:#94a3b8; --good:#22c55e; --bad:#ef4444; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--text); }
+    header { padding:16px 24px; background:var(--panel); display:flex; align-items:center; gap:16px; }
+    header h1 { margin:0; font-size:20px; color:var(--accent); }
+    .who { color:var(--muted); font-size:13px; }
+    main { max-width:980px; margin:24px auto; padding:0 16px; }
+    .tabs { display:flex; gap:4px; margin-bottom:16px; border-bottom:1px solid #334155; }
+    .tab { padding:10px 16px; cursor:pointer; color:var(--muted); border-bottom:2px solid transparent; }
+    .tab.active { color:var(--accent); border-color:var(--accent); }
+    .panel { background:var(--panel); padding:20px; border-radius:8px; display:none; }
+    .panel.active { display:block; }
+    label { display:block; font-size:12px; color:var(--muted); margin:8px 0 4px; }
+    input, select, button { font:inherit; padding:8px 10px; border-radius:6px; border:1px solid #334155; background:#0f172a; color:var(--text); }
+    button { background:var(--accent); color:#0f172a; font-weight:600; cursor:pointer; border:none; padding:10px 16px; }
+    button.ghost { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+    .row { display:flex; gap:10px; flex-wrap:wrap; }
+    .row > div { flex:1; min-width:180px; }
+    .list { margin-top:16px; }
+    .item { background:#0f172a; padding:12px; border-radius:6px; margin-bottom:8px; border-left:3px solid var(--accent); }
+    .item.read { opacity:.55; border-left-color:#475569; }
+    .item h4 { margin:0 0 4px; font-size:14px; }
+    .item small { color:var(--muted); }
+    .toast { position:fixed; bottom:20px; right:20px; padding:12px 16px; background:var(--panel); border-radius:6px; border-left:3px solid var(--good); display:none; }
+    .toast.err { border-left-color:var(--bad); }
+    pre { background:#0f172a; padding:10px; border-radius:6px; overflow:auto; font-size:12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>💸 FinFlow Client</h1>
+    <span class="who" id="who">not logged in</span>
+    <span style="flex:1"></span>
+    <button class="ghost" id="logout" style="display:none">logout</button>
+  </header>
+  <main>
+    <div class="tabs">
+      <div class="tab active" data-tab="auth">Login/Register</div>
+      <div class="tab" data-tab="accounts">Accounts</div>
+      <div class="tab" data-tab="transfer">Transfer</div>
+      <div class="tab" data-tab="notifs">Notifications <span id="unread"></span></div>
+    </div>
+
+    <section class="panel active" data-panel="auth">
+      <h3>Register</h3>
+      <div class="row">
+        <div><label>Full name</label><input id="r_name" value="Alice"></div>
+        <div><label>Email</label><input id="r_email" value="alice@example.com"></div>
+        <div><label>Password</label><input id="r_pwd" type="password" value="secret123"></div>
+      </div>
+      <p><button onclick="register()">Register</button></p>
+      <h3>Login</h3>
+      <div class="row">
+        <div><label>Email</label><input id="l_email" value="alice@example.com"></div>
+        <div><label>Password</label><input id="l_pwd" type="password" value="secret123"></div>
+      </div>
+      <p><button onclick="login()">Login</button></p>
+    </section>
+
+    <section class="panel" data-panel="accounts">
+      <h3>My accounts</h3>
+      <div class="row">
+        <div><label>Currency</label>
+          <select id="acc_cur"><option>EUR</option><option>USD</option><option>GBP</option></select>
+        </div>
+        <div style="display:flex;align-items:flex-end">
+          <button onclick="createAccount()">Create account</button>
+        </div>
+      </div>
+      <div class="list" id="accounts_list"></div>
+      <h3>Deposit / Withdraw</h3>
+      <div class="row">
+        <div><label>Account</label><select id="op_account"></select></div>
+        <div><label>Amount</label><input id="op_amount" type="number" value="100"></div>
+      </div>
+      <p>
+        <button onclick="op('deposit')">Deposit</button>
+        <button onclick="op('withdraw')" class="ghost">Withdraw</button>
+      </p>
+    </section>
+
+    <section class="panel" data-panel="transfer">
+      <h3>Transfer money</h3>
+      <div class="row">
+        <div><label>From</label><select id="t_from"></select></div>
+        <div><label>To account ID</label><input id="t_to" placeholder="paste recipient account id"></div>
+        <div><label>Amount</label><input id="t_amount" type="number" value="30"></div>
+      </div>
+      <p><button onclick="transfer()">Send</button></p>
+    </section>
+
+    <section class="panel" data-panel="notifs">
+      <h3>Notifications <small style="color:var(--muted)">(auto-refresh 5s)</small></h3>
+      <div class="list" id="notif_list"></div>
+    </section>
+  </main>
+  <div class="toast" id="toast"></div>
+
+<script>
+const BASE = 'http://localhost:3000';
+let token = localStorage.getItem('finflow_token') || '';
+let user  = JSON.parse(localStorage.getItem('finflow_user') || 'null');
+
+function $(s){ return document.querySelector(s); }
+function $$(s){ return document.querySelectorAll(s); }
+function toast(msg, err){
+  const t = $('#toast'); t.textContent = msg; t.className = 'toast' + (err?' err':'');
+  t.style.display = 'block'; setTimeout(()=> t.style.display='none', 2500);
+}
+function setAuth(t, u){
+  token = t || ''; user = u || null;
+  if (t) { localStorage.setItem('finflow_token', t); localStorage.setItem('finflow_user', JSON.stringify(u)); }
+  else   { localStorage.removeItem('finflow_token'); localStorage.removeItem('finflow_user'); }
+  $('#who').textContent = user ? `${user.full_name || user.email}` : 'not logged in';
+  $('#logout').style.display = user ? '' : 'none';
+}
+async function api(path, opts={}){
+  const headers = { 'Content-Type':'application/json', ...(opts.headers||{}) };
+  if (token) headers.Authorization = 'Bearer ' + token;
+  const r = await fetch(BASE + path, { ...opts, headers, body: opts.body ? JSON.stringify(opts.body) : undefined });
+  const ct = r.headers.get('content-type') || '';
+  const data = ct.includes('json') ? await r.json() : await r.text();
+  if (!r.ok) { toast(data.error || data.message || ('HTTP ' + r.status), true); throw new Error('api'); }
+  return data;
+}
+
+async function register(){
+  const r = await api('/api/auth/register', { method:'POST', body:{
+    email:$('#r_email').value, password:$('#r_pwd').value, full_name:$('#r_name').value
+  }});
+  setAuth(r.token, r.user); toast('Registered ' + r.user.email); refreshAll();
+}
+async function login(){
+  const r = await api('/api/auth/login', { method:'POST', body:{
+    email:$('#l_email').value, password:$('#l_pwd').value
+  }});
+  setAuth(r.token, r.user); toast('Logged in'); refreshAll();
+}
+$('#logout').onclick = () => { setAuth(null, null); location.reload(); };
+
+async function loadAccounts(){
+  if (!token) return;
+  const accs = await api('/api/accounts');
+  const list = $('#accounts_list'); list.innerHTML = '';
+  const opSel = $('#op_account'); const fromSel = $('#t_from');
+  opSel.innerHTML = ''; fromSel.innerHTML = '';
+  accs.forEach(a => {
+    list.insertAdjacentHTML('beforeend',
+      `<div class="item"><h4>${a.iban} <small>(${a.currency})</small></h4>
+       <small>balance: <b>${a.balance}</b> — id: ${a.id}</small></div>`);
+    const opt = `<option value="${a.id}">${a.iban} — ${a.balance} ${a.currency}</option>`;
+    opSel.insertAdjacentHTML('beforeend', opt);
+    fromSel.insertAdjacentHTML('beforeend', opt);
+  });
+}
+async function createAccount(){
+  await api('/api/accounts', { method:'POST', body:{ currency:$('#acc_cur').value }});
+  toast('Account created'); loadAccounts();
+}
+async function op(kind){
+  await api('/api/transactions/' + kind, { method:'POST', body:{
+    account_id:$('#op_account').value, amount:Number($('#op_amount').value)
+  }});
+  toast(kind + ' ok'); loadAccounts();
+}
+async function transfer(){
+  await api('/api/transactions/transfer', { method:'POST', body:{
+    from_account_id:$('#t_from').value, to_account_id:$('#t_to').value,
+    amount:Number($('#t_amount').value)
+  }});
+  toast('Transfer sent'); loadAccounts();
+}
+
+async function loadNotifs(){
+  if (!token) return;
+  const items = await api('/api/notifications');
+  const list = $('#notif_list'); list.innerHTML = '';
+  let unread = 0;
+  items.forEach(n => {
+    if (!n.read) unread++;
+    list.insertAdjacentHTML('beforeend',
+      `<div class="item ${n.read?'read':''}">
+         <h4>${n.title} <small>[${n.type}]</small></h4>
+         <div>${n.message}</div>
+         <small>${new Date(n.created_at).toLocaleString()}</small>
+         ${n.read ? '' : `<p><button class="ghost" onclick="markRead('${n.id}')">Mark as read</button></p>`}
+       </div>`);
+  });
+  $('#unread').textContent = unread ? ` (${unread})` : '';
+}
+async function markRead(id){
+  await api('/api/notifications/' + id + '/read', { method:'PATCH' });
+  loadNotifs();
+}
+
+function refreshAll(){ loadAccounts(); loadNotifs(); }
+
+$$('.tab').forEach(t => t.onclick = () => {
+  $$('.tab').forEach(x => x.classList.remove('active'));
+  $$('.panel').forEach(x => x.classList.remove('active'));
+  t.classList.add('active');
+  document.querySelector(`.panel[data-panel="${t.dataset.tab}"]`).classList.add('active');
+});
+
+setAuth(token, user);
+refreshAll();
+setInterval(loadNotifs, 5000);
+</script>
+</body>
+</html>
