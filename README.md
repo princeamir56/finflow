@@ -8,34 +8,7 @@ FinFlow is a polyglot-protocol, event-driven banking backend: **REST + GraphQL**
 
 ## Architecture
 
-```
-                  ┌────────────────────────────────────────────┐
-                  │              Clients                       │
-                  │  curl  •  Postman  •  HTML test client     │
-                  └─────────────────┬──────────────────────────┘
-                                    │ REST / GraphQL  (HTTP :3000)
-                                    ▼
-                         ┌──────────────────────┐
-                         │       GATEWAY        │
-                         │ Express + Apollo GQL │
-                         │  JWT auth middleware │
-                         └─────────┬────────────┘
-                                   │ gRPC
-              ┌────────────────────┼─────────────────────┐
-              ▼                    ▼                     ▼
-      ┌──────────────┐    ┌──────────────────┐   ┌────────────────────┐
-      │ auth-service │    │transaction-svc   │   │notification-svc    │
-      │   :50051     │    │     :50052       │   │     :50053         │
-      │  SQLite      │    │  SQLite (atomic) │   │  RxDB (in-memory)  │
-      └──────┬───────┘    └────────┬─────────┘   └─────────▲──────────┘
-             │                     │                       │
-             │ produces            │ produces              │ consumes
-             ▼                     ▼                       │
-       user.registered   account.created,                  │
-                         transaction.created               │
-                                   └───────► Kafka ────────┘
-                                          (:9092)
-```
+![Architecture](images/architecture.png)
 
 ---
 
