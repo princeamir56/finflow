@@ -282,6 +282,22 @@ Endpoint: `POST /graphql` (Apollo Server 4 embedded in the Gateway).
 
 ---
 
+## Screenshots
+
+### Docker Desktop — all services running
+
+![Docker Desktop](images/DockerDesktop.png)
+
+`docker compose up -d --build` brings the entire stack up in one command: Zookeeper, Kafka broker, Kafka UI, and the four Node services (gateway, auth, transaction, notification). The screenshot shows every container healthy and listening on its mapped port.
+
+### Postman — REST endpoints tested
+
+![Postman](images/Postman.png)
+
+The Postman collection at [docs/POSTMAN_COLLECTION.json](docs/POSTMAN_COLLECTION.json) exercises the full REST surface — register, login, create account, deposit, withdraw, transfer, list notifications. The screenshot shows a successful run end-to-end against the live gateway.
+
+---
+
 ## End-to-end demo scenario
 
 1. **Register** Alice via REST → auth-service writes to SQLite → publishes `user.registered` → notification-service stores a welcome notification.
