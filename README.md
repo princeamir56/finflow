@@ -179,24 +179,89 @@ mutation { markNotificationAsRead(id:"<nid>") { id read } }
 
 ---
 
-## Kafka topics
+## Kafka — event-driven backbone
 
-| Topic                  | Producer            | Consumer              | Payload (data fields)                                                   |
-| ---------------------- | ------------------- | --------------------- | ----------------------------------------------------------------------- |
-| `user.registered`      | auth-service        | notification-service  | `userId, email, fullName`                                               |
-| `account.created`      | transaction-service | notification-service  | `accountId, userId, iban, currency, balance`                            |
-| `transaction.created`  | transaction-service | notification-service  | `transactionId, type, amount, fromAccountId, toAccountId, fromUserId, toUserId, fromIban, toIban, currency, status, description` |
+Kafka decouples the write-side services (auth, transaction) from the read-side service (notification). Producers don't know who consumes; consumers can be added without changing producers.
 
-All events share the envelope: `{ eventId, eventType, timestamp, version, data }`.
-The notification-service stores `eventId`s in an RxDB collection for idempotency.
+### Topics
+
+| Topic                  | Producer            | Consumer              | Business meaning                                  | Payload (data fields)                                                   |
+| ---------------------- | ------------------- | --------------------- | ------------------------------------------------- | ----------------------------------------------------------------------- |
+| `user.registered`      | auth-service        | notification-service  | A new user account was created — welcome them.    | `userId, email, fullName`                                               |
+| `account.created`      | transaction-service | notification-service  | A bank account was opened — confirm it.          | `accountId, userId, iban, currency, balance`                            |
+| `transaction.created`  | transaction-service | notification-service  | Money moved — notify both sender and receiver.    | `transactionId, type, amount, fromAccountId, toAccountId, fromUserId, toUserId, fromIban, toIban, currency, status, description` |
+
+### Message envelope
+
+All events share the same envelope, which makes the consumer generic:
+
+```json
+{
+  "eventId": "uuid-v4",
+  "eventType": "transaction.created",
+  "timestamp": "2026-05-19T10:00:00.000Z",
+  "version": "1.0",
+  "data": { /* topic-specific fields */ }
+}
+```
+
+- **Producers** — `KafkaJS` producer in each service, fired *after* the database write commits.
+- **Consumer** — single notification-service consumer group subscribed to all three topics ([services/notification-service/src/kafka/consumer.js](services/notification-service/src/kafka/consumer.js)).
+- **Idempotency** — every processed `eventId` is stored in the RxDB `processed_events` collection; a redelivery is detected and skipped.
+- **Operability** — **Kafka UI** at `http://localhost:8080` lets you browse topics, partitions, and messages live.
 
 ---
 
-## .proto contracts
+## gRPC — inter-service backbone
+
+gRPC is the **only** transport between the Gateway and the three microservices. REST and GraphQL stop at the Gateway; everything below is Protobuf over HTTP/2.
+
+### .proto contracts
 
 - [shared/proto/auth.proto](shared/proto/auth.proto) — `AuthService` (Register, Login, VerifyToken, GetUser)
 - [shared/proto/transaction.proto](shared/proto/transaction.proto) — `TransactionService` (CreateAccount, GetAccount, GetUserAccounts, Deposit, Withdraw, Transfer, GetHistory)
 - [shared/proto/notification.proto](shared/proto/notification.proto) — `NotificationService` (GetUserNotifications, MarkAsRead, GetUnreadCount)
+
+Each `.proto` defines strongly-typed `Request` / `Response` messages with explicit field numbers — the contract is the single source of truth shared by the gateway client stubs and the server implementations.
+
+### Implementation
+
+- **Servers** — each microservice loads its `.proto` via `@grpc/proto-loader` and binds handlers with `@grpc/grpc-js`. Listening on `:50051` (auth), `:50052` (transaction), `:50053` (notification).
+- **Clients** — the gateway builds promisified stubs in [gateway/src/config](gateway/src/config) so REST/GraphQL resolvers can `await` gRPC calls naturally.
+- **HTTP/2 + Protobuf** — handled natively by `@grpc/grpc-js`; multiplexed streams over a single connection per service.
+- **Error mapping** — services return canonical gRPC status codes (`NOT_FOUND`, `INVALID_ARGUMENT`, `UNAUTHENTICATED`, `FAILED_PRECONDITION` for insufficient balance, `ALREADY_EXISTS` for duplicate email). The gateway's [middleware/errorHandler](gateway/src/middleware) translates them into HTTP status codes for REST and GraphQL `extensions.code`.
+- **Contract ↔ business logic** — every business action (register, deposit, transfer, mark-as-read) has a matching RPC; nothing leaks around gRPC.
+
+---
+
+## REST — edge API
+
+Mounted under `/api` in the Gateway and split by domain:
+
+| Resource         | Verb + Path                                | Backed by gRPC                          |
+| ---------------- | ------------------------------------------ | --------------------------------------- |
+| Auth             | `POST /api/auth/register`, `/login`        | `AuthService.Register` / `Login`        |
+| Accounts         | `POST/GET /api/accounts`, `GET /:id`       | `TransactionService.CreateAccount` …    |
+| Transactions     | `POST /api/transactions/{deposit,withdraw,transfer}`, `GET /account/:id` | `TransactionService.Deposit` …          |
+| Notifications    | `GET /api/notifications`, `PATCH /:id/read`| `NotificationService.GetUserNotifications` … |
+
+- JWT middleware guards every non-auth route (see [gateway/src/middleware](gateway/src/middleware)).
+- Documented and testable via **Swagger UI** at `http://localhost:3000/api-docs`.
+- Ready-to-import **Postman collection** at [docs/POSTMAN_COLLECTION.json](docs/POSTMAN_COLLECTION.json).
+- Curl examples in the section above.
+
+---
+
+## GraphQL — flexible client API
+
+Endpoint: `POST /graphql` (Apollo Server 4 embedded in the Gateway).
+
+**Why GraphQL here?** REST gives one fixed shape per endpoint; a banking dashboard typically needs *user + accounts + recent transactions + unread count* in a single round-trip. GraphQL lets clients request exactly that, while reusing the same gRPC stubs the REST layer uses — no duplication of business logic.
+
+- **Schema** — [gateway/src/graphql/schema.js](gateway/src/graphql/schema.js): `User`, `Account`, `Transaction`, `Notification` types; queries `me`, `myAccounts`, `myNotifications`, `unreadNotificationCount`; mutations `register`, `login`, `createAccount`, `deposit`, `withdraw`, `transfer`, `markNotificationAsRead`.
+- **Resolvers** — [gateway/src/graphql/resolvers.js](gateway/src/graphql/resolvers.js) delegate to the same gRPC clients used by REST.
+- **Auth** — JWT is read from the `Authorization` header in the Apollo `context` function and propagated to resolvers.
+- Examples in the GraphQL section above.
 
 ---
 
@@ -214,6 +279,29 @@ The notification-service stores `eventId`s in an RxDB collection for idempotency
 `processed_events { eventId PK, processedAt }` — enforces consumer idempotency.
 
 > **Storage note:** the notification service uses `rxdb/plugins/storage-memory` for project simplicity. Swap for `storage-dexie` (browser) or `storage-mongodb` for persistence — only [services/notification-service/src/db/rxdb.js](services/notification-service/src/db/rxdb.js) changes.
+
+---
+
+## End-to-end demo scenario
+
+1. **Register** Alice via REST → auth-service writes to SQLite → publishes `user.registered` → notification-service stores a welcome notification.
+2. **Login** Alice → receives JWT.
+3. **Create account** (GraphQL `createAccount`) → transaction-service writes to SQLite → publishes `account.created` → notification appears.
+4. **Deposit** 100 EUR (REST) → atomic SQLite tx → `transaction.created` → notification.
+5. **Transfer** 30 EUR to Bob → single SQLite transaction debits/credits both sides → notification for both users.
+6. **Query** `myNotifications` via GraphQL — single round-trip returns user + accounts + notifications.
+
+The HTML client in [client/](client/) walks through the whole flow without writing any code.
+
+---
+
+## Originality & added value
+
+- **Polyglot persistence in one project** — SQLite (relational, ACID) for money + RxDB (NoSQL, reactive) for notifications. The same data is *not* duplicated; each service owns what fits its access pattern.
+- **Atomic transfers** — the transfer RPC executes debit + credit + transaction row inside a single `better-sqlite3` transaction (see [services/transaction-service](services/transaction-service)), so the balance can never drift.
+- **Idempotent consumers** — `processed_events` collection guards against Kafka redeliveries, which matters as soon as the consumer restarts.
+- **Three protocols, one business core** — REST, GraphQL, and gRPC all share the same underlying domain logic; the project shows when each protocol is the right tool.
+- **Containerized** — `docker compose up -d --build` brings up Zookeeper, Kafka, Kafka UI, and all four Node services. No local infrastructure to install.
 
 ---
 
